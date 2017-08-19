@@ -5,6 +5,7 @@ local _L = MY.LoadLangPack(MY.GetAddonInfo().szRoot .. "MY_TargetMon/lang/")
 local INI_PATH = MY.GetAddonInfo().szRoot .. "MY_TargetMon/ui/MY_TargetMon.ini"
 local ROLE_CONFIG_FILE = {'config/my_targetmon.jx3dat', MY_DATA_PATH.ROLE}
 local DEFAULT_CONFIG_FILE = MY.GetAddonInfo().szRoot .. "MY_TargetMon/data/$lang.jx3dat"
+local CUSTOM_DEFAULT_CONFIG_FILE = {'config/my_targetmon.jx3dat', MY_DATA_PATH.GLOBAL}
 local CUSTOM_BOXBG_STYLES = {
 	"UI/Image/Common/Box.UITex|0",
 	"UI/Image/Common/Box.UITex|1",
@@ -413,7 +414,7 @@ local function UpdateItem(hItem, KTarget, buff, szName, tItem, config, nFrameCou
 		end
 		-- 加入同名BUFF列表
 		if not hItem.mon.ids[buff.dwID] then
-			hItem.mon.ids[buff.dwID] = Table_GetBuffIconID(buff.dwID, buff.nLevel) or 13
+			hItem.mon.ids[buff.dwID] = { framecount = 0, iconid = Table_GetBuffIconID(buff.dwID, buff.nLevel) or 13 }
 		end
 	elseif config.type == 'SKILL' and buff and szName then
 		if config.hideVoid and not hItem:IsVisible() then
@@ -508,7 +509,7 @@ function FE.OnFrameBreathe()
 			for i = 0, hList:GetItemCount() - 1 do
 				local hItem = hList:Lookup(i)
 				local bFind = false
-				for dwSkillID, dwIcon in pairs(hItem.mon.ids) do
+				for dwSkillID, info in pairs(hItem.mon.ids) do
 					local dwLevel = KTarget.GetSkillLevel(dwSkillID)
 					local bCool, nLeft, nTotal, nCDCount, bPublicCD = KTarget.GetSkillCDProgress(dwSkillID, dwLevel, 444)
 					if bCool and nLeft ~= 0 and nTotal ~= 0 and not bPublicCD then
@@ -544,7 +545,7 @@ local function OnSkill(this, dwID, dwLevel)
 				if not hItem.mon.iconid or hItem.mon.iconid == 13 then
 					hItem.mon.iconid = Table_GetSkillIconID(dwID, dwLevel)
 				end
-				hItem.mon.ids[dwID] = Table_GetSkillIconID(dwID, dwLevel)
+				hItem.mon.ids[dwID] = { framecount = 0, iconid = Table_GetSkillIconID(dwID, dwLevel) }
 			end
 		end
 	end
@@ -556,7 +557,7 @@ local function OnSkill(this, dwID, dwLevel)
 				if not hItem.mon.iconid or hItem.mon.iconid == 13 then
 					hItem.mon.iconid = Table_GetSkillIconID(dwID, dwLevel)
 				end
-				hItem.mon.ids[dwID] = Table_GetSkillIconID(dwID, dwLevel)
+				hItem.mon.ids[dwID] = { framecount = 0, iconid = Table_GetSkillIconID(dwID, dwLevel) }
 			end
 		end
 	end
@@ -603,6 +604,9 @@ local function UpdateConfigDataVersion(config)
 			mon.name, mon.buffname = mon.name or mon.buffname, nil
 			mon.id  , mon.buffid   = mon.id   or mon.buffid  , nil
 			mon.ids , mon.buffids  = mon.ids  or mon.buffids , nil
+			for dwID, dwIconID in pairs(mon.ids) do
+				mon.ids = { framecount = 0, iconid = dwIconID }
+			end
 		end
 	end
 	config.type = config.type or 'BUFF'
@@ -648,6 +652,7 @@ RegisterCustomData("MY_BuffMonT.anchor")
 RegisterCustomData("MY_BuffMonT.tBuffList")
 local function OnInit()
 	local data = MY.LoadLUAData(DEFAULT_CONFIG_FILE)
+	data.default = MY.LoadLUAData(CUSTOM_DEFAULT_CONFIG_FILE) or data.default
 	local OLD_PATH = {'config/my_buffmon.jx3dat', MY_DATA_PATH.ROLE}
 	local SZ_OLD_PATH = MY.FormatPath(OLD_PATH)
 	if IsLocalFileExist(SZ_OLD_PATH) then
@@ -699,7 +704,15 @@ local function OnInit()
 					end
 					table.insert(Config[index].monitors[kungfuid], {
 						enable = mon[1], iconid = mon[2],
-						name = mon[3], id = mon[4], ids = mon[5]
+						name = mon[3], id = mon[4], ids = (function()
+							local ids = {}
+							if mon[5] then
+								for dwID, dwIconID in pairs(mon[5]) do
+									ids[dwID] = { framecount = 0, iconid = dwIconID}
+								end
+							end
+							return ids
+						end)(),
 					})
 				end
 			end
@@ -739,7 +752,10 @@ for i = 1, 5 do
 	for j = 1, 10 do
 		Hotkey.AddBinding("MY_TargetMon_" .. i .. "_" .. j, _L("Cancel buff %d - %d", i, j), title, function()
 			if MY.IsShieldedVersion() and not MY.IsInDungeon(true) then
-				return OutputMessage("MSG_ANNOUNCE_YELLOW", _L['Cancel buff is disabled outside dungeon.'])
+				if not IsDebugClient() then
+					OutputMessage("MSG_ANNOUNCE_YELLOW", _L['Cancel buff is disabled outside dungeon.'])
+				end
+				return
 			end
 			local config = Config[i]
 			if not config or config.type ~= 'BUFF' then
@@ -1181,7 +1197,8 @@ end
 function PS.OnPanelActive(wnd)
 	local ui = MY.UI(wnd)
 	local w, h = ui:size()
-	local x, y = 20, 30
+	local X, Y = 20, 30
+	local x, y = X, Y
 	
 	for _, config in ipairs(Config) do
 		x, y = GenePS(ui, config, x, y, w, h)
@@ -1189,8 +1206,9 @@ function PS.OnPanelActive(wnd)
 	end
 	y = y + 10
 	
+	x = (w - 310) / 2
 	ui:append("WndButton2", {
-		x = (w - 290) / 2, y = y,
+		x = x, y = y,
 		w = 60, h = 30,
 		text = _L["Create"],
 		onclick = function()
@@ -1200,8 +1218,9 @@ function PS.OnPanelActive(wnd)
 			MY.SwitchTab("MY_TargetMon", true)
 		end,
 	})
+	x = x + 70
 	ui:append("WndButton2", {
-		x = (w - 290) / 2 + 70, y = y,
+		x = x, y = y,
 		w = 60, h = 30,
 		text = _L["Import"],
 		onclick = function()
@@ -1217,20 +1236,41 @@ function PS.OnPanelActive(wnd)
 			end, function() end, function() end, nil, "" )
 		end,
 	})
+	x = x + 70
 	ui:append("WndButton2", {
-		x = (w - 290) / 2 + 140, y = y,
+		x = x, y = y,
+		w = 80, h = 30,
+		text = _L["Save As Default"],
+		onclick = function()
+			MY.Confirm(_L['Sure to save as default?'], function()
+				MY.SaveLUAData(CUSTOM_DEFAULT_CONFIG_FILE, Config)
+			end)
+		end,
+	})
+	x = x + 90
+	ui:append("WndButton2", {
+		x = x, y = y,
 		w = 80, h = 30,
 		text = _L["Reset Default"],
+		tip = _L['Hold ctrl to reset original default.'],
+		tippostype = MY.Const.UI.Tip.POS_TOP,
 		onclick = function()
-			MY.Confirm(_L['Sure to reset default?'], function()
+			local ctrl = IsCtrlKeyDown()
+			MY.Confirm(_L[ctrl and 'Sure to reset original default?' or 'Sure to reset default?'], function()
 				ClosePanel('all')
-				Config = MY.LoadLUAData(DEFAULT_CONFIG_FILE).default
+				Config = MY.LoadLUAData(CUSTOM_DEFAULT_CONFIG_FILE)
+				if not Config or ctrl then
+					Config = MY.LoadLUAData(DEFAULT_CONFIG_FILE).default
+				end
 				UpdateConfigCalcProps(Config)
 				RecreateAllPanel()
 				MY.SwitchTab("MY_TargetMon", true)
 			end)
 		end,
 	})
+	x = x + 90
+
+	x = X
 	y = y + 30
 end
 MY.RegisterPanel("MY_TargetMon", _L["target monitor"], _L['Target'], "ui/Image/ChannelsPanel/NewChannels.UITex|141", { 255, 255, 0, 200 }, PS)
