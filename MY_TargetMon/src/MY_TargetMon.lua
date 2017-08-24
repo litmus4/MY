@@ -487,7 +487,7 @@ local function UpdateArrow(hArrow, KTarget, config, dwID)
 		if nPlayerRad >= nTargetRad then
 			nRelativeRad = 2 * math.pi - nRelativeRad
 		end
-		hArrow.imgArrow:SetRotate(-nRelativeRad)
+		hArrow.imgArrow:SetRotate(2 * math.pi - nRelativeRad)
 	end
 end
 function FE.OnFrameBreathe()
@@ -734,6 +734,8 @@ local function OnInit()
 			Config[index].cdBarUITex   = OBJ.szCDUITex
 			Config[index].showName     = OBJ.bSkillName
 			Config[index].boxBgUITex   = "UI/Image/Common/Box.UITex|44"
+			Config[index].showArrow    = OBJ.showArrow
+			Config[index].isCameraBased= OBJ.isCameraBased
 			Config[index].anchor       = OBJ.anchor
 			Config[index].monitors     = {}
 			for kungfuid, mons in pairs(OBJ.tBuffList) do
@@ -1168,6 +1170,39 @@ local function GenePS(ui, config, x, y, w, h)
 	})
 	y = y + 30
 	
+	ui:append("WndCheckBox", {
+		x = x + 20, y = y, w = 120,
+		text = _L['show arrow'],
+		checked = config.showArrow,
+		oncheck = function(bCheck)
+			config.showArrow = bCheck
+			RecreatePanel(config)
+		end,
+	})
+	
+	ui:append("WndCheckBox", {
+		x = x + 120, y = y, w = 140,
+		text = _L['arrow camera based'],
+		checked = config.isCameraBased,
+		oncheck = function(bCheck)
+			config.isCameraBased = bCheck
+			RecreatePanel(config)
+		end,
+	})
+
+	ui:append("WndSliderBox", {
+		x = w - 250, y = y,
+		sliderstyle = MY.Const.UI.Slider.SHOW_VALUE,
+		range = {50, 1000},
+		value = config.cdBarWidth,
+		textfmt = function(val) return _L("CD width %dpx.", val) end,
+		onchange = function(raw, val)
+			config.cdBarWidth = val
+			RecreatePanel(config)
+		end,
+	})
+	y = y + 30
+	
 	ui:append("WndComboBox", {
 		x = 40, y = y, w = (w - 250 - 30 - 30 - 10) / 2,
 		text = _L['Select background style'],
@@ -1218,18 +1253,6 @@ local function GenePS(ui, config, x, y, w, h)
 				table.insert(t, subt)
 			end
 			return t
-		end,
-	})
-	
-	ui:append("WndSliderBox", {
-		x = w - 250, y = y,
-		sliderstyle = MY.Const.UI.Slider.SHOW_VALUE,
-		range = {50, 1000},
-		value = config.cdBarWidth,
-		textfmt = function(val) return _L("CD width %dpx.", val) end,
-		onchange = function(raw, val)
-			config.cdBarWidth = val
-			RecreatePanel(config)
 		end,
 	})
 	y = y + 30
