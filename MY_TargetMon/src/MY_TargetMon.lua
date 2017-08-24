@@ -154,8 +154,7 @@ local function RecreatePanel(config)
 		l_frameIndex = l_frameIndex + 1
 		l_frames[config] = frame
 		frame.hList = frame:Lookup("", "Handle_List")
-		local hArrow = frame:Lookup("", "Handle_Arrow")
-		frame.imgArrow = hArrow:Lookup("Image_Arrow")
+		frame.hArrow = frame:Lookup("", "Handle_Arrow")
 		
 		for k, v in pairs(FE) do
 			frame[k] = v
@@ -168,7 +167,7 @@ local function RecreatePanel(config)
 	elseif frame.scale then
 		frame:Scale(1 / frame.scale, 1 / frame.scale)
 	end
-	local hList = frame.hList
+	local hList, hArrow = frame.hList, frame.hArrow
 	
 	hList:Clear()
 	frame.tItem = {}
@@ -289,6 +288,9 @@ local function RecreatePanel(config)
 	hList:SetIgnoreInvisibleChild(true)
 	hList:FormatAllItemPos()
 	UpdateHotkey(frame)
+
+	hArrow.imgArrow = hArrow:Lookup("Image_Arrow")
+	hArrow:Hide()
 	
 	local nW, nH = hList:GetSize()
 	nW = math.max(nW, 50 * config.scale)
@@ -461,7 +463,7 @@ function FE.OnFrameBreathe()
 		return
 	end
 	needFormatItemPos = false
-	local hList = this.hList
+	local hList, hArrow = this.hList, this.hArrow
 	local config = this.config
 	local KTarget = MY.GetObject(dwType, dwID)
 	local targetChanged = dwType ~= this.dwType or dwID ~= this.dwID
@@ -471,8 +473,8 @@ function FE.OnFrameBreathe()
 		for i = 0, hList:GetItemCount() - 1 do
 			UpdateItem(hList:Lookup(i), KTarget, nil, nil, this.tItem, config, nFrameCount, targetChanged)
 		end
-		if this.imgArrow:IsVisible() then
-			this.imgArrow:SetVisible(false)
+		if hArrow:IsVisible() then
+			hArrow:Hide()
 		end
 	else
 		if config.type == 'BUFF' then
@@ -533,30 +535,32 @@ function FE.OnFrameBreathe()
 			hList:FormatAllItemPos()
 		end
 
-		--FLAGJK
-		if not this.imgArrow:IsVisible() then
-			this.imgArrow:SetVisible(true)
-		end
 		local player = GetClientPlayer()
-		local nPlayerRad = player.nFaceDirection / 128 * math.pi
-		local nDirX = KTarget.nX - player.nX
-		local nDirY = KTarget.nY - player.nY
-		local nDirK = math.sqrt(nDirX ^ 2 + nDirY ^ 2)
-		local nTargetRad = math.asin(math.abs(nDirY) / math.abs(nDirK))
-		if nDirX >= 0 and nDirY >= 0 then
-			--nTargetRad = nTargetRad + 0
-		elseif nDirX < 0 and nDirY >= 0 then
-			nTargetRad = math.pi - nTargetRad
-		elseif nDirX < 0 and nDirY < 0 then
-			nTargetRad = nTargetRad + math.pi
-		elseif nDirX >= 0 and nDirY < 0 then
-			nTargetRad = 2 * math.pi - nTargetRad
+		if dwID ~= player.dwID then
+			if not hArrow:IsVisible() then
+				hArrow:Show()
+			end
+			local nPlayerRad = player.nFaceDirection / 128 * math.pi
+			local nDirX = KTarget.nX - player.nX
+			local nDirY = KTarget.nY - player.nY
+			local nDirK = math.sqrt(nDirX ^ 2 + nDirY ^ 2)
+			local nTargetRad = nPlayerRad
+			if nDirK > 0 then
+				nTargetRad = math.asin(math.abs(nDirY) / math.abs(nDirK))
+				if nDirX < 0 and nDirY >= 0 then
+					nTargetRad = math.pi - nTargetRad
+				elseif nDirX < 0 and nDirY < 0 then
+					nTargetRad = nTargetRad + math.pi
+				elseif nDirX >= 0 and nDirY < 0 then
+					nTargetRad = 2 * math.pi - nTargetRad
+				end
+			end
+			local nRelativeRad = math.abs(nPlayerRad - nTargetRad)
+			if nPlayerRad >= nTargetRad then
+				nRelativeRad = 2 * math.pi - nRelativeRad
+			end
+			hArrow.imgArrow:SetRotate(-nRelativeRad)
 		end
-		local nRelativeRad = math.abs(nPlayerRad - nTargetRad)
-		if nPlayerRad >= nTargetRad then
-			nRelativeRad = 2 * math.pi - nRelativeRad
-		end
-		--this.imgArrow:SetRotate(-nRelativeRad)
 	end
 	this.dwType, this.dwID = dwType, dwID
 end
