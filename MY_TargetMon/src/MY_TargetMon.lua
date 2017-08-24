@@ -456,6 +456,40 @@ local function UpdateItem(hItem, KTarget, buff, szName, tItem, config, nFrameCou
 		hItem.nRenderFrame = nil
 	end
 end
+local function UpdateArrow(hArrow, KTarget, config, dwID)
+	local player = GetClientPlayer()
+	if config.showArrow and dwID ~= player.dwID then
+		if not hArrow:IsVisible() then
+			hArrow:Show()
+		end
+		local nPlayerRad = 0
+		if config.isCameraBased then
+			local fCameraToObjectEyeScale, fYaw, fPitch = Camera_GetRTParams()
+			nPlayerRad = 2 * math.pi - fYaw + math.pi / 2
+		else
+			nPlayerRad = player.nFaceDirection / 128 * math.pi
+		end
+		local nDirX = KTarget.nX - player.nX
+		local nDirY = KTarget.nY - player.nY
+		local nDirK = math.sqrt(nDirX ^ 2 + nDirY ^ 2)
+		local nTargetRad = nPlayerRad
+		if nDirK > 0 then
+			nTargetRad = math.asin(math.abs(nDirY) / math.abs(nDirK))
+			if nDirX < 0 and nDirY >= 0 then
+				nTargetRad = math.pi - nTargetRad
+			elseif nDirX < 0 and nDirY < 0 then
+				nTargetRad = nTargetRad + math.pi
+			elseif nDirX >= 0 and nDirY < 0 then
+				nTargetRad = 2 * math.pi - nTargetRad
+			end
+		end
+		local nRelativeRad = math.abs(nPlayerRad - nTargetRad)
+		if nPlayerRad >= nTargetRad then
+			nRelativeRad = 2 * math.pi - nRelativeRad
+		end
+		hArrow.imgArrow:SetRotate(-nRelativeRad)
+	end
+end
 function FE.OnFrameBreathe()
 	local dwType, dwID = GetTarget(this.config.target, this.config.type)
 	if dwType == this.dwType and dwID == this.dwID
@@ -535,32 +569,7 @@ function FE.OnFrameBreathe()
 			hList:FormatAllItemPos()
 		end
 
-		local player = GetClientPlayer()
-		if dwID ~= player.dwID then
-			if not hArrow:IsVisible() then
-				hArrow:Show()
-			end
-			local nPlayerRad = player.nFaceDirection / 128 * math.pi
-			local nDirX = KTarget.nX - player.nX
-			local nDirY = KTarget.nY - player.nY
-			local nDirK = math.sqrt(nDirX ^ 2 + nDirY ^ 2)
-			local nTargetRad = nPlayerRad
-			if nDirK > 0 then
-				nTargetRad = math.asin(math.abs(nDirY) / math.abs(nDirK))
-				if nDirX < 0 and nDirY >= 0 then
-					nTargetRad = math.pi - nTargetRad
-				elseif nDirX < 0 and nDirY < 0 then
-					nTargetRad = nTargetRad + math.pi
-				elseif nDirX >= 0 and nDirY < 0 then
-					nTargetRad = 2 * math.pi - nTargetRad
-				end
-			end
-			local nRelativeRad = math.abs(nPlayerRad - nTargetRad)
-			if nPlayerRad >= nTargetRad then
-				nRelativeRad = 2 * math.pi - nRelativeRad
-			end
-			hArrow.imgArrow:SetRotate(-nRelativeRad)
-		end
+		UpdateArrow(hArrow, KTarget, config, dwID)
 	end
 	this.dwType, this.dwID = dwType, dwID
 end
