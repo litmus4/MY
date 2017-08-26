@@ -647,8 +647,12 @@ local function UpdateConfigDataVersion(config)
 			mon.name, mon.buffname = mon.name or mon.buffname, nil
 			mon.id  , mon.buffid   = mon.id   or mon.buffid  , nil
 			mon.ids , mon.buffids  = mon.ids  or mon.buffids , nil
-			for dwID, dwIconID in pairs(mon.ids) do
-				mon.ids = { framecount = 0, iconid = dwIconID }
+			if mon.ids then
+				for dwID, dwIconID in pairs(mon.ids) do
+					mon.ids[dwID] = { framecount = 0, iconid = dwIconID }
+				end
+			else
+				mon.ids = {}
 			end
 		end
 	end
