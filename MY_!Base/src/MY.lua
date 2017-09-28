@@ -115,8 +115,8 @@ MY = {}
 --------------------------------------------------------------------------------------------------------------------------------------------
 -- 本地函数变量
 --------------------------------------------------------------------------------------------------------------------------------------------
-local _BUILD_ = "20170802"
-local _VERSION_ = 0x2008000
+local _BUILD_ = "20170811"
+local _VERSION_ = 0x2008100
 local _DEBUGLV_ = tonumber(LoadLUAData('interface/my.debug.level') or nil) or 4
 local _DELOGLV_ = tonumber(LoadLUAData('interface/my.delog.level') or nil) or 4
 local _NORESTM_ = tonumber(LoadLUAData('interface/my.nrtim.level') or nil) or -1
@@ -278,6 +278,12 @@ function MY.OpenPanel(bMute, bNoFocus, bNoAnimate)
 		  :click(function()
 		  	XGUI.OpenIE("http://weibo.com/zymah")
 		  end)
+		MY.UI(hFrame):onevent('UI_SCALED', function()
+			local fn = hFrame:Lookup('Wnd_Total/WndScroll_MainPanel/ScrollBar_MainPanel').OnScrollBarPosChanged
+			if fn then
+				fn()
+			end
+		end)
 		-- updaet logo image
 		MY.UI(MY.GetFrame()):item('#Image_Icon')
 		  :size(30, 30)
@@ -829,6 +835,7 @@ function MY.SwitchTab(szID, bForceUpdate)
 	if not bForceUpdate and wndMainPanel.szID == szID then
 		-- return
 	end
+	local wndScroll = frame:Lookup('Wnd_Total/WndScroll_MainPanel/ScrollBar_MainPanel')
 	-- fire custom registered on switch event
 	if wndMainPanel.OnPanelDeactive then
 		local res, err = pcall(wndMainPanel.OnPanelDeactive, wndMainPanel)
@@ -843,6 +850,7 @@ function MY.SwitchTab(szID, bForceUpdate)
 	wndMainPanel.OnPanelResize   = nil
 	wndMainPanel.OnPanelActive   = nil
 	wndMainPanel.OnPanelDeactive = nil
+	wndScroll.OnScrollBarPosChanged = nil
 	if not szID then
 		-- 欢迎页
 		local ui = MY.UI(wndMainPanel)
@@ -905,9 +913,19 @@ function MY.SwitchTab(szID, bForceUpdate)
 						end
 						wndMainPanel:FormatAllContentPos()
 					end
-					wndMainPanel.OnPanelResize   = tab.fn.OnPanelResize
-					wndMainPanel.OnPanelActive   = tab.fn.OnPanelActive
-					wndMainPanel.OnPanelDeactive = tab.fn.OnPanelDeactive
+					wndMainPanel.OnPanelResize      = tab.fn.OnPanelResize
+					wndMainPanel.OnPanelActive      = tab.fn.OnPanelActive
+					wndMainPanel.OnPanelDeactive    = tab.fn.OnPanelDeactive
+					wndScroll.OnScrollBarPosChanged = function()
+						if not tab.fn.OnPanelScroll then
+							return
+						end
+						local scale = Station.GetUIScale()
+						local scrollX, scrollY = wndMainPanel:GetStartRelPos()
+						scrollX = scrollX == 0 and 0 or -scrollX / scale
+						scrollY = scrollY == 0 and 0 or -scrollY / scale
+						tab.fn.OnPanelScroll(wndMainPanel, scrollX, scrollY)
+					end
 					break
 				end
 			end
@@ -980,9 +998,10 @@ function MY.RegisterPanel(szID, szTitle, szCategory, szIconTex, rgbaTitleColor, 
 		rgbTitle    = { rgbaTitleColor[1], rgbaTitleColor[2], rgbaTitleColor[3] },
 		alpha       = rgbaTitleColor[4],
 		fn          = {
-			OnPanelResize  = options.OnPanelResize ,
-			OnPanelActive  = options.OnPanelActive ,
+			OnPanelResize   = options.OnPanelResize  ,
+			OnPanelActive   = options.OnPanelActive  ,
 			OnPanelDeactive = options.OnPanelDeactive,
+			OnPanelScroll   = options.OnPanelScroll  ,
 		},
 	})
 
