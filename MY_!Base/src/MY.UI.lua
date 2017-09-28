@@ -19,14 +19,16 @@ local _L = MY.LoadLangPack()
 -- these global functions are accessed all the time by the event handler
 -- so caching them is worth the effort
 ------------------------------------------------------------------------
+local setmetatable = setmetatable
 local ipairs, pairs, next, pcall = ipairs, pairs, next, pcall
-local tinsert, tremove, tconcat = table.insert, table.remove, table.concat
-local ssub, slen, schar, srep, sbyte, sformat, sgsub = string.sub, string.len, string.char, string.rep, string.byte, string.format, string.gsub
+local insert, remove, concat = table.insert, table.remove, table.concat
+local sub, len, char, rep = string.sub, string.len, string.char, string.rep
+local byte, format, gsub = string.byte, string.format, string.gsub
 local type, tonumber, tostring = type, tonumber, tostring
 local GetTime, GetLogicFrameCount = GetTime, GetLogicFrameCount
-local floor, mmin, mmax, mceil = math.floor, math.min, math.max, math.ceil
-local GetClientPlayer, GetPlayer, GetNpc, GetClientTeam, UI_GetClientPlayerID = GetClientPlayer, GetPlayer, GetNpc, GetClientTeam, UI_GetClientPlayerID
-local setmetatable = setmetatable
+local floor, min, max, ceil = math.floor, math.min, math.max, math.ceil
+local GetClientPlayer, GetPlayer, GetNpc = GetClientPlayer, GetPlayer, GetNpc
+local GetClientTeam, UI_GetClientPlayerID = GetClientTeam, UI_GetClientPlayerID
 
 ---------------------------------------------------------------------
 -- 本地的 UI 组件对象
@@ -79,11 +81,34 @@ local function ApplyUIArguments(ui, arg)
 end
 XGUI.ApplyUIArguments = ApplyUIArguments
 
+local GetComponentProp, SetComponentProp
+local GetComponentType, SetComponentType
+do local l_prop = setmetatable({}, { __mode = 'k' })
+	function GetComponentProp(raw, k)
+		return l_prop[raw] and l_prop[raw][k]
+	end
+
+	function SetComponentProp(raw, k, v)
+		if not l_prop[raw] then
+			l_prop[raw] = {}
+		end
+		l_prop[raw][k] = v
+	end
+
+	function GetComponentType(raw)
+		return GetComponentProp(raw, 'type') or raw:GetType()
+	end
+
+	function SetComponentType(raw, szType)
+		SetComponentProp(raw, 'type', szType)
+	end
+end
+
 -- conv raw to eles array
 local function raw2ele(raw)
 	-- format tab
 	local ele = { raw = raw }
-	ele.type = raw.szMyuiType or raw:GetType()
+	ele.type = GetComponentType(raw)
 	if ele.type == "WndCheckBox" then
 		ele.chk = raw
 		ele.wnd = ele.wnd or raw
@@ -307,14 +332,14 @@ function XGUI:del(raw)
 			if string.sub(raw, 1, 1) == "^" then
 				-- regexp
 				for i = #eles, 1, -1 do
-					if string.find((eles[i].raw.szMyuiType or eles[i].raw:GetType()), raw) then
+					if string.find(GetComponentType(eles[i].raw), raw) then
 						table.remove(eles, i)
 					end
 				end
 			else
 				-- normal
 				for i = #eles, 1, -1 do
-					if (eles[i].raw.szMyuiType or eles[i].raw:GetType()) == raw then
+					if GetComponentType(eles[i].raw) == raw then
 						table.remove(eles, i)
 					end
 				end
@@ -364,14 +389,14 @@ function XGUI:filter(raw)
 			if string.sub(raw, 1, 1) == "^" then
 				-- regexp
 				for i = #eles, 1, -1 do
-					if not string.find((eles[i].raw.szMyuiType or eles[i].raw:GetType()), raw) then
+					if not string.find(GetComponentType(eles[i].raw), raw) then
 						table.remove(eles, i)
 					end
 				end
 			else
 				-- normal
 				for i = #eles, 1, -1 do
-					if (eles[i].raw.szMyuiType or eles[i].raw:GetType()) ~= raw then
+					if GetComponentType(eles[i].raw) ~= raw then
 						table.remove(eles, i)
 					end
 				end
@@ -750,7 +775,7 @@ function XGUI:append(szType, szName, tArg, bReturnNewItem)
 				if not wnd then
 					MY.Debug({_L("can not find wnd component [%s]", szType)}, 'MY#UI#append', MY_DEBUG.ERROR)
 				else
-					wnd.szMyuiType = szType
+					SetComponentType(wnd, szType)
 					if szName then
 						wnd:SetName(szName)
 					end
@@ -759,37 +784,36 @@ function XGUI:append(szType, szName, tArg, bReturnNewItem)
 						wnd.bShowPercentage = true
 						wnd.nOffset = 0
 						wnd.tMyOnChange = {}
-						wnd:Lookup("WndNewScrollBar_Default").FormatText = function(value, bPercentage)
+						local scroll = wnd:Lookup("WndNewScrollBar_Default")
+						wnd.FormatText = function(value, bPercentage)
 							if bPercentage then
 								return string.format("%.2f%%", value)
 							else
 								return value
 							end
 						end
-						wnd:Lookup("WndNewScrollBar_Default").OnScrollBarPosChanged = function()
-							local fnFormat = wnd:Lookup("WndNewScrollBar_Default").FormatText
-							if wnd.bShowPercentage then
-								local nCurrentPercentage = this:GetScrollPos() * 100 / this:GetStepCount()
-								wnd:Lookup("", "Text_Default"):SetText(fnFormat(nCurrentPercentage, true))
-								for _, fn in ipairs(wnd.tMyOnChange) do
-									pcall(fn, wnd, nCurrentPercentage)
-								end
-							else
-								local nCurrentValue = this:GetScrollPos() + wnd.nOffset
-								wnd:Lookup("", "Text_Default"):SetText(fnFormat(nCurrentValue, false))
+						wnd.ResponseUpdateScroll = function(bOnlyUI)
+							local _this = this
+							this = wnd
+							local nScrollPos, nStepCount = scroll:GetScrollPos(), scroll:GetStepCount()
+							local nCurrentValue = wnd.bShowPercentage and (nScrollPos * 100 / nStepCount) or (nScrollPos + wnd.nOffset)
+							wnd:Lookup("", "Text_Default"):SetText(wnd.FormatText(nCurrentValue, wnd.bShowPercentage))
+							if not bOnlyUI then
 								for _, fn in ipairs(wnd.tMyOnChange) do
 									pcall(fn, wnd, nCurrentValue)
 								end
 							end
+							this = _this
 						end
-						wnd:Lookup("WndNewScrollBar_Default").OnMouseWheel = function()                                   -- listening Mouse Wheel
-							local nDistance = Station.GetMessageWheelDelta()            -- get distance
-							wnd:Lookup("WndNewScrollBar_Default"):ScrollNext(-nDistance*2)            -- wheel scroll position
+						scroll.OnScrollBarPosChanged = function()
+							wnd.ResponseUpdateScroll()
+						end
+						scroll.OnMouseWheel = function()
+							scroll:ScrollNext(-Station.GetMessageWheelDelta() * 2)
 							return 1
 						end
-						wnd:Lookup("WndNewScrollBar_Default"):Lookup('Btn_Track').OnMouseWheel = function()               -- listening Mouse Wheel
-							local nDistance = Station.GetMessageWheelDelta()            -- get distance
-							wnd:Lookup("WndNewScrollBar_Default"):ScrollNext(-nDistance)            -- wheel scroll position
+						scroll:Lookup('Btn_Track').OnMouseWheel = function()
+							scroll:ScrollNext(-Station.GetMessageWheelDelta())
 							return 1
 						end
 					elseif szType=='WndEditBox' then
@@ -945,7 +969,7 @@ function XGUI:append(szType, szName, tArg, bReturnNewItem)
 					if bReturnNewItem then
 						ret = ret:add(wnd)
 					end
-					ui = XGUI(wnd):hover(OnCommonComponentMouseEnter, OnCommonComponentMouseLeave)
+					ui = XGUI(wnd):hover(OnCommonComponentMouseEnter, OnCommonComponentMouseLeave):change(OnCommonComponentMouseEnter)
 				end
 				Wnd.CloseWindow(frame)
 			elseif ( string.sub(szType, 1, 3) ~= "Wnd" and ele.hdl ) then
@@ -1070,9 +1094,9 @@ local function SetEleEnable(x, ele, bEnable)
 		if ele.txt then
 			local r, g, b = ele.txt:GetFontColor()
 			if bEnable then
-				ele.txt:SetFontColor(mmin(mceil(r * 2.2), 255), mmin(mceil(g * 2.2), 255), mmin(mceil(b * 2.2), 255))
+				ele.txt:SetFontColor(min(ceil(r * 2.2), 255), min(ceil(g * 2.2), 255), min(ceil(b * 2.2), 255))
 			else
-				ele.txt:SetFontColor(mmin(mceil(r / 2.2), 255), mmin(mceil(g / 2.2), 255), mmin(mceil(b / 2.2), 255))
+				ele.txt:SetFontColor(min(ceil(r / 2.2), 255), min(ceil(g / 2.2), 255), min(ceil(b / 2.2), 255))
 			end
 		end
 	end
@@ -1190,7 +1214,8 @@ function XGUI:text(szText)
 				ele.hdl:AppendItemFromString(GetFormatText(szText))
 				ele.hdl:FormatAllItemPos()
 			elseif ele.type == "WndSliderBox" and type(szText)=="function" then
-				ele.sld.FormatText = szText
+				ele.wnd.FormatText = szText
+				ele.wnd.ResponseUpdateScroll(true)
 			elseif ele.type == "WndEditBox" or ele.type == "WndAutocomplete" then
 				if type(szText) == "table" then
 					for k, v in ipairs(szText) do
@@ -3414,7 +3439,7 @@ function XGUI.OpenColorPickerEx(fnAction)
 	local fnHover = function(bHover, r, g, b)
 		if bHover then
 			wnd:item("#Select"):color(r, g, b)
-			wnd:item("#Select_Text"):text(sformat("r=%d, g=%d, b=%d", r, g, b))
+			wnd:item("#Select_Text"):text(format("r=%d, g=%d, b=%d", r, g, b))
 		else
 			wnd:item("#Select"):color(255, 255, 255)
 			wnd:item("#Select_Text"):text(g_tStrings.STR_NONE)
@@ -3524,7 +3549,7 @@ function XGUI.OpenIconPanel(fnAction)
 					boxs[i]:icon(-1)
 					txts[i]:text(nIcon):toggle(true)
 					MY.DelayCall(function()
-						if mceil(nIcon / 144) == ICON_PAGE and boxs[i] then
+						if ceil(nIcon / 144) == ICON_PAGE and boxs[i] then
 							boxs[i]:icon(nIcon):toggle(true)
 						end
 					end)
@@ -3810,7 +3835,7 @@ function XGUI.GetShadowHandle(szName)
 	end
 	local sh = Station.Lookup("Lowest/MY_Shadows") or Wnd.OpenWindow(MY.GetAddonInfo().szFrameworkRoot .. "ui/MY_Shadows.ini", "MY_Shadows")
 	if not sh:Lookup("", szName) then
-		sh:Lookup("", ""):AppendItemFromString(sformat("<handle> name=\"%s\" </handle>", szName))
+		sh:Lookup("", ""):AppendItemFromString(format("<handle> name=\"%s\" </handle>", szName))
 	end
 	MY.Debug({"Create sh # " .. szName}, "XGUI", MY_DEBUG.LOG)
 	return sh:Lookup("", szName)
