@@ -1,6 +1,23 @@
 ---------------------------------------------------------------------
 -- BUFF监控
 ---------------------------------------------------------------------
+
+------------------------------------------------------------------------
+-- these global functions are accessed all the time by the event handler
+-- so caching them is worth the effort
+------------------------------------------------------------------------
+local setmetatable = setmetatable
+local ipairs, pairs, next, pcall = ipairs, pairs, next, pcall
+local insert, remove, concat = table.insert, table.remove, table.concat
+local sub, len, format, rep = string.sub, string.len, string.format, string.rep
+local find, byte, char, gsub = string.find, string.byte, string.char, string.gsub
+local wsub, wlen, wfind = wstring.sub, wstring.len, wstring.find
+local type, tonumber, tostring = type, tonumber, tostring
+local GetTime, GetLogicFrameCount = GetTime, GetLogicFrameCount
+local floor, min, max, ceil = math.floor, math.min, math.max, math.ceil
+local GetClientPlayer, GetPlayer, GetNpc = GetClientPlayer, GetPlayer, GetNpc
+local GetClientTeam, UI_GetClientPlayerID = GetClientTeam, UI_GetClientPlayerID
+
 local _L = MY.LoadLangPack(MY.GetAddonInfo().szRoot .. "MY_TargetMon/lang/")
 local INI_PATH = MY.GetAddonInfo().szRoot .. "MY_TargetMon/ui/MY_TargetMon.ini"
 local ROLE_CONFIG_FILE = {'config/my_targetmon.jx3dat', MY_DATA_PATH.ROLE}
@@ -144,6 +161,43 @@ local function UpdateAnchor(frame)
 	CorrectPos(frame)
 end
 
+local function FixFormatAllItemPos(hList)
+	local FormatAllItemPos = hList.FormatAllItemPos
+	hList.FormatAllItemPos = function(hList, ...)
+		local hItem = hList:Lookup(0)
+		if not hItem then
+			return
+		end
+		local W = hList:GetW()
+		local w, h = hItem:GetSize()
+		local columms = max(floor(W / w), 1)
+		local aItem = {}
+		for i = 0, hList:GetItemCount() - 1 do
+			local hItem = hList:Lookup(i)
+			if hItem:IsVisible() then
+				insert(aItem, hItem)
+			end
+		end
+		local align = hList:GetHAlign()
+		while #aItem > 0 do
+			local x, y, deltaX = 0, 0, 0
+			if align == ALIGNMENT.LEFT then
+				x, deltaX = 0, w
+			elseif align == ALIGNMENT.RIGHT then
+				x, deltaX = W, - w
+			elseif align == ALIGNMENT.CENTER then
+				x, deltaX = (W - w * min(#aItem, columms)) / 2, w
+			end
+			for i = 1, min(#aItem, columms) do
+				remove(aItem, 1):SetRelPos(x, y)
+				x = x + deltaX
+			end
+			y = y + deltaY
+		end
+		SafeExecuteWithThis(hList, FormatAllItemPos, hList, ...)
+	end
+end
+
 local function RecreatePanel(config)
 	if not config.enable then
 		return ClosePanel(config)
@@ -154,6 +208,7 @@ local function RecreatePanel(config)
 		l_frameIndex = l_frameIndex + 1
 		l_frames[config] = frame
 		frame.hList = frame:Lookup("", "Handle_List")
+		FixFormatAllItemPos(frame.hList)
 		
 		for k, v in pairs(FE) do
 			frame[k] = v
@@ -287,6 +342,7 @@ local function RecreatePanel(config)
 	for _, mon in ipairs(config.monitors[GetClientPlayer().GetKungfuMount().dwSkillID] or EMPTY_TABLE) do
 		CreateItem(mon)
 	end
+	hList:SetHAlign(ALIGNMENT[config.alignment] or ALIGNMENT.LEFT)
 	hList:SetW(nWidth)
 	hList:SetIgnoreInvisibleChild(false)
 	hList:FormatAllItemPos()
@@ -339,9 +395,11 @@ local function GetTarget(eTarType, eMonType)
 		end
 	elseif TEAM_MARK[eTarType] then
 		local mark = GetClientTeam().GetTeamMark()
-		for dwID, nMark in pairs(mark) do
-			if TEAM_MARK[eTarType] == nMark then
-				return TARGET[IsPlayer(dwID) and "PLAYER" or "NPC"], dwID
+		if mark then
+			for dwID, nMark in pairs(mark) do
+				if TEAM_MARK[eTarType] == nMark then
+					return TARGET[IsPlayer(dwID) and "PLAYER" or "NPC"], dwID
+				end
 			end
 		end
 	end
@@ -363,7 +421,7 @@ local function UpdateItem(hItem, KTarget, buff, szName, tItem, config, nFrameCou
 			end
 			-- 计算BUFF时间
 			local nTimeLeft = math.max(0, buff.nEndFrame - nFrameCount) / 16
-			local szTimeLeft = ((config.decimalTime == -1 or nTimeLeft < config.decimalTime) and "%.1f'" or '%d'):format(nTimeLeft)
+			local szTimeLeft = nTimeLeft > 3600 and '1h+' or ((config.decimalTime == -1 or nTimeLeft < config.decimalTime) and "%.1f'" or "%d'"):format(nTimeLeft)
 			local nBuffTime = math.max(GetBuffTime(buff.dwID, buff.nLevel) / 16, nTimeLeft)
 			if l_tBuffTime[KTarget.dwID][buff.dwID] then
 				nBuffTime = math.max(l_tBuffTime[KTarget.dwID][buff.dwID], nBuffTime)
@@ -394,7 +452,7 @@ local function UpdateItem(hItem, KTarget, buff, szName, tItem, config, nFrameCou
 			end
 			-- 倒计时 与 BUFF层数堆叠
 			hItem.txtProcess:SetText(szTimeLeft)
-			hItem.box:SetOverText(1, nTimeLeft > 3600 and '1h+' or szTimeLeft)
+			hItem.box:SetOverText(1, szTimeLeft)
 			hItem.box:SetOverText(0, buff.nStackNum == 1 and "" or buff.nStackNum)
 			-- CD百分比
 			local fPercent = nTimeLeft / nBuffTime
@@ -941,6 +999,17 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 					end,
 				})
 			end
+			table.insert(t, { bDevide = true })
+			for _, eType in ipairs({'LEFT', 'RIGHT', 'CENTER'}) do
+				table.insert(t, {
+					szOption = _L.ALIGNMENT[eType],
+					bCheck = true, bMCheck = true, bChecked = eType == config.alignment,
+					fnAction = function()
+						config.alignment = eType
+						RecreatePanel(config)
+					end,
+				})
+			end
 			return t
 		end,
 	})
@@ -1126,7 +1195,7 @@ function PS.OnPanelActive(wnd)
 	local OpenConfig
 	do -- single config details
 		local l_config
-		local uiWrapper = ui:append('WndWindow', 'WndWindow_Wrapper', { x = 0, y = 0, w = w, h = h }, true)
+		local uiWrapper = ui:append('WndWindow', { name = 'WndWindow_Wrapper', x = 0, y = 0, w = w, h = h }, true)
 		uiWrapper:append('Shadow', { x = 0, y = 0, w = w, h = h, r = 0, g = 0, b = 0, alpha = 150 })
 		uiWrapper:append('Shadow', { x = 10, y = 10, w = w - 20, h = h - 20, r = 255, g = 255, b = 255, alpha = 40 })
 		

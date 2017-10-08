@@ -196,6 +196,46 @@ function MY.GetAddonInfo()
 end
 end
 
+do
+local function createInstance(c, ins, ...)
+	if not ins then
+		ins = c
+	end
+	if c.ctor then
+		c.ctor(ins, ...)
+	end
+	return c
+end
+function MY.class(className, super)
+	if type(super) == "string" then
+		className, super = super
+	end
+	if not className then
+		className = "Unnamed Class"
+	end
+	local classPrototype = (function ()
+		local proxys = {}
+		if super then
+			proxys.super = super
+			setmetatable(proxys, { __index = super })
+		end
+		return setmetatable({}, {
+			__index = proxys,
+			__tostring = function(t) return className .. " (class prototype)" end,
+			__call = function (...)
+				return createInstance(setmetatable({}, {
+					__index = classPrototype,
+					__tostring = function(t) return className .. " (class instance)" end,
+				}), nil, ...)
+			end,
+		})
+	end)()
+
+	return classPrototype
+end
+end
+
+
 --------------------------------------------------------------------------------------------------------------------------------------------
 -- 界面开关
 --------------------------------------------------------------------------------------------------------------------------------------------
@@ -239,7 +279,7 @@ function MY.OpenPanel(bMute, bNoFocus, bNoAnimate)
 		hFrame.intact = true
 		hFrame:SetPoint("CENTER", 0, 0, "CENTER", 0, 0)
 		hFrame:CorrectPos()
-		
+
 		-- update some ui handle
 		hFrame:Lookup("", "Text_Title"):SetText(_L['mingyi plugins'] .. " v" .. MY.GetVersion() .. ' Build ' .. _BUILD_)
 		hFrame:Lookup("Wnd_Total", "Handle_DBClick").OnItemLButtonDBClick = function()
@@ -261,14 +301,14 @@ function MY.OpenPanel(bMute, bNoFocus, bNoAnimate)
 			local ui = MY.UI(hFrame)
 			_MY.anchor = ui:anchor()
 			_MY.w, _MY.h = ui:size()
-			ui:pos(0, 0):onevent('UI_SCALED.FRAME_MAXIMIZE_RESIZE', function()
+			ui:pos(0, 0):event('UI_SCALED.FRAME_MAXIMIZE_RESIZE', function()
 				ui:size(Station.GetClientSize())
 			end):drag(false)
 			MY.ResizePanel(Station.GetClientSize())
 		end, function()
 			MY.ResizePanel(_MY.w, _MY.h)
 			MY.UI(hFrame)
-			  :onevent('UI_SCALED.FRAME_MAXIMIZE_RESIZE')
+			  :event('UI_SCALED.FRAME_MAXIMIZE_RESIZE')
 			  :drag(true)
 			  :anchor(_MY.anchor)
 		end)
@@ -278,14 +318,14 @@ function MY.OpenPanel(bMute, bNoFocus, bNoAnimate)
 		  :click(function()
 		  	XGUI.OpenIE("http://weibo.com/zymah")
 		  end)
-		MY.UI(hFrame):onevent('UI_SCALED', function()
+		MY.UI(hFrame):event('UI_SCALED', function()
 			local fn = hFrame:Lookup('Wnd_Total/WndScroll_MainPanel/ScrollBar_MainPanel').OnScrollBarPosChanged
 			if fn then
 				fn()
 			end
 		end)
 		-- updaet logo image
-		MY.UI(MY.GetFrame()):item('#Image_Icon')
+		MY.UI(MY.GetFrame()):children('#Image_Icon')
 		  :size(30, 30)
 		  :image(_UITEX_COMMON_, 0)
 		-- update category
@@ -375,7 +415,7 @@ local function OnInit()
 	MY.CreateDataRoot(MY_DATA_PATH.ROLE)
 	MY.CreateDataRoot(MY_DATA_PATH.GLOBAL)
 	MY.CreateDataRoot(MY_DATA_PATH.SERVER)
-	
+
 	for szKey, fnAction in pairs(INIT_FUNC_LIST) do
 		local nStartTick = GetTickCount()
 		local status, err = pcall(fnAction)
@@ -681,7 +721,7 @@ function MY.RedrawCategory(szCategory)
 	if not frame then
 		return
 	end
-	
+
 	-- draw category
 	local wndCategoryList = frame:Lookup('Wnd_Total/WndContainer_Category')
 	wndCategoryList:Clear()
@@ -700,7 +740,7 @@ function MY.RedrawCategory(szCategory)
 				if chkCategory.bActived then
 					return
 				end
-				
+
 				PlaySound(SOUND.UI_SOUND, g_sound.OpenFrame)
 				local p = chkCategory:GetParent():GetFirstChild()
 				while p do
@@ -716,7 +756,7 @@ function MY.RedrawCategory(szCategory)
 		end
 	end
 	wndCategoryList:FormatAllContentPos()
-	
+
 	MY.SwitchCategory(szCategory)
 end
 
@@ -726,7 +766,7 @@ function MY.SwitchCategory(szCategory)
 	if not frame then
 		return
 	end
-	
+
 	local hList = frame:Lookup('Wnd_Total/WndContainer_Category')
 	local chk = hList:GetFirstChild()
 	while(chk and chk.szCategory ~= szCategory) do
@@ -746,11 +786,11 @@ function MY.RedrawTab(szCategory)
 	if not (frame and szCategory) then
 		return
 	end
-	
+
 	-- draw tabs
 	local hTabs = frame:Lookup('Wnd_Total/WndScroll_Tabs', '')
 	hTabs:Clear()
-	
+
 	for _, ctg in ipairs(TABS_LIST) do
 		if ctg.id == szCategory then
 			for i, tab in ipairs(ctg) do
@@ -782,7 +822,7 @@ function MY.RedrawTab(szCategory)
 		end
 	end
 	hTabs:FormatAllItemPos()
-	
+
 	MY.SwitchTab()
 end
 
@@ -791,7 +831,7 @@ function MY.SwitchTab(szID, bForceUpdate)
 	if not frame then
 		return
 	end
-	
+
 	if szID then
 		-- check if category is right
 		local szCategory = frame:Lookup('Wnd_Total/WndContainer_Category').szCategory
@@ -804,7 +844,7 @@ function MY.SwitchTab(szID, bForceUpdate)
 				end
 			end
 		end
-		
+
 		-- get tab window
 		local hTab
 		local hTabs = frame:Lookup('Wnd_Total/WndScroll_Tabs', '')
@@ -819,7 +859,7 @@ function MY.SwitchTab(szID, bForceUpdate)
 		if not hTab.bActived then
 			PlaySound(SOUND.UI_SOUND, g_sound.OpenFrame)
 		end
-		
+
 		-- deal with ui response
 		local hTabs = hTab:GetParent()
 		for i = 0, hTabs:GetItemCount() - 1 do
@@ -829,7 +869,7 @@ function MY.SwitchTab(szID, bForceUpdate)
 		hTab.bActived = true
 		hTab:Lookup("Image_Bg_Active"):Show()
 	end
-	
+
 	-- get main panel
 	local wndMainPanel = frame:Lookup('Wnd_Total/WndScroll_MainPanel/WndContainer_MainPanel')
 	if not bForceUpdate and wndMainPanel.szID == szID then
@@ -846,7 +886,7 @@ function MY.SwitchTab(szID, bForceUpdate)
 	wndMainPanel.OnPanelDeactive = nil
 	wndMainPanel:Clear()
 	wndMainPanel:Lookup('', ''):Clear()
-	
+
 	wndMainPanel.OnPanelResize   = nil
 	wndMainPanel.OnPanelActive   = nil
 	wndMainPanel.OnPanelDeactive = nil
@@ -855,49 +895,52 @@ function MY.SwitchTab(szID, bForceUpdate)
 		-- 欢迎页
 		local ui = MY.UI(wndMainPanel)
 		local w, h = ui:size()
-		ui:append("Image", "Image_Adv", { x = 0, y = 0, image = _UITEX_POSTER_, imageframe = 0 })
-		ui:append("Text", "Text_Adv", { x = 10, y = 300, w = 557, font = 200 })
-		ui:append("Text", "Text_ChangeLog", {
+		ui:append("Image", { name = 'Image_Adv', x = 0, y = 0, image = _UITEX_POSTER_, imageframe = 0 })
+		ui:append("Text", { name = 'Text_Adv', x = 10, y = 300, w = 557, font = 200 })
+		ui:append("Text", {
+			name = 'Text_ChangeLog',
 			x = 10, y = 325, w = 80, font = 204, text = _L['change log'], alpha = 190,
 			onclick = function() XGUI.OpenIE("https://cdn.rawgit.com/tinymins/MY/master/changelog.html?_=" .. GetCurrentTime(), false, 600, 800) end,
 			onhover = function(bIn) this:SetAlpha(bIn and 255 or 190) end,
 		})
-		ui:append("Text", "Text_Serendipity", {
+		ui:append("Text", {
+			name = 'Text_Serendipity',
 			x = 90, y = 325, w = 80, font = 204, text = _L['serendipity'], alpha = 190,
 			onclick = function() XGUI.OpenIE("http://jx3.derzh.com/serendipity/", false, 500, 800) end,
 			onhover = function(bIn) this:SetAlpha(bIn and 255 or 190) end,
 		})
-		ui:append("Text", "Text_Zhezhi", {
+		ui:append("Text", {
+			name = 'Text_OnlineTime',
 			x = 90, y = 325, w = 80, font = 204, text = _L['online time'], alpha = 190,
 			onclick = function() XGUI.OpenIE("http://jx3.derzh.com/onlinetime/", false, 500, 800) end,
 			onhover = function(bIn) this:SetAlpha(bIn and 255 or 190) end,
 		})
-		ui:append("Text", "Text_Svr", { x = 10, y = 345, w = 557, font = 204, text = MY.GetServer() .. " (" .. MY.GetRealServer() .. ")", alpha = 220 })
+		ui:append("Text", { name = 'Text_Svr', x = 10, y = 345, w = 557, font = 204, text = MY.GetServer() .. " (" .. MY.GetRealServer() .. ")", alpha = 220 })
 		wndMainPanel.OnPanelResize = function(wnd)
 			local w, h = MY.UI(wnd):size()
 			local scaleH = w / 557 * 278
 			local bottomH = 90
 			if scaleH > h - bottomH then
-				ui:item('#Image_Adv'):size((h - bottomH) / 278 * 557, (h - bottomH))
-				ui:item('#Text_Adv'):pos(10, h - bottomH + 10)
-				ui:item('#Text_Svr'):pos(10, h - bottomH + 35)
-				ui:item('#Text_ChangeLog'):pos(10, h - bottomH + 60)
-				ui:item('#Text_Serendipity'):pos(90, h - bottomH + 60)
-				ui:item('#Text_Zhezhi'):pos(170, h - bottomH + 60)
+				ui:children('#Image_Adv'):size((h - bottomH) / 278 * 557, (h - bottomH))
+				ui:children('#Text_Adv'):pos(10, h - bottomH + 10)
+				ui:children('#Text_Svr'):pos(10, h - bottomH + 35)
+				ui:children('#Text_ChangeLog'):pos(10, h - bottomH + 60)
+				ui:children('#Text_Serendipity'):pos(90, h - bottomH + 60)
+				ui:children('#Text_OnlineTime'):pos(170, h - bottomH + 60)
 			else
-				ui:item('#Image_Adv'):size(w, scaleH)
-				ui:item('#Text_Adv'):pos(10, scaleH + 10)
-				ui:item('#Text_Svr'):pos(10, scaleH + 35)
-				ui:item('#Text_ChangeLog'):pos(10, scaleH + 60)
-				ui:item('#Text_Serendipity'):pos(90, scaleH + 60)
-				ui:item('#Text_Zhezhi'):pos(170, scaleH + 60)
+				ui:children('#Image_Adv'):size(w, scaleH)
+				ui:children('#Text_Adv'):pos(10, scaleH + 10)
+				ui:children('#Text_Svr'):pos(10, scaleH + 35)
+				ui:children('#Text_ChangeLog'):pos(10, scaleH + 60)
+				ui:children('#Text_Serendipity'):pos(90, scaleH + 60)
+				ui:children('#Text_OnlineTime'):pos(170, scaleH + 60)
 			end
 		end
 		wndMainPanel.OnPanelResize(wndMainPanel)
 		MY.BreatheCall(500, function()
 			local player = GetClientPlayer()
 			if player then
-				ui:item('#Text_Adv'):text(_L('%s, welcome to use mingyi plugins!', player.szName) .. 'v' .. MY.GetVersion())
+				ui:children('#Text_Adv'):text(_L('%s, welcome to use mingyi plugins!', player.szName) .. 'v' .. MY.GetVersion())
 				return 0
 			end
 		end)
@@ -962,7 +1005,7 @@ function MY.RegisterPanel(szID, szTitle, szCategory, szIconTex, rgbaTitleColor, 
 	if szTitle == nil then
 		return
 	end
-	
+
 	if not category then
 		table.insert(TABS_LIST, {
 			id = szCategory,
@@ -1050,48 +1093,66 @@ function MY.OnFrameCreate()
 end
 
 function _MY.OnSizeChanged()
-	local hFrame = this
-	if not hFrame then
+	local frame = this
+	if not frame then
 		return
 	end
-	local nWidth, nHeight = hFrame:GetSize()
-	hFrame:Lookup("Btn_Drag"):SetRelPos(nWidth - 18, nHeight - 20)
-	hFrame:Lookup('', 'Text_Author'):SetRelPos(0, nHeight - 41)
-	hFrame:Lookup('', 'Text_Author'):SetSize(nWidth - 31, 20)
-	hFrame:Lookup('', ''):FormatAllItemPos()
-	local hWnd = hFrame:Lookup('Wnd_Total')
-	local hTotal = hWnd:Lookup('', '')
-	hTotal:SetSize(nWidth, nHeight)
-	hTotal:Lookup('Image_Breaker'):SetSize(6, nHeight - 340)
-	hTotal:Lookup('Image_TabBg'):SetSize(nWidth - 2, 33)
-	hTotal:Lookup('Handle_DBClick'):SetSize(nWidth, 54)
-	hWnd:SetSize(nWidth, nHeight)
-	hWnd:Lookup('WndContainer_Category'):SetSize(nWidth - 22, 32)
-	hWnd:Lookup('WndContainer_Category'):FormatAllContentPos()
-	hWnd:Lookup('Btn_Weibo'):SetRelPos(nWidth - 135, 55)
-	
-	hWnd:Lookup('WndScroll_Tabs'):SetSize(171, nHeight - 102)
-	hWnd:Lookup('WndScroll_Tabs', ''):SetSize(171, nHeight - 102)
-	hWnd:Lookup('WndScroll_Tabs', ''):FormatAllItemPos()
-	hWnd:Lookup('WndScroll_Tabs/ScrollBar_Tabs'):SetSize(16, nHeight - 111)
-	
+	-- fix size
+	local nWidth, nHeight = frame:GetSize()
+	if nWidth  < 132 then nWidth  = 132 end
+	if nHeight < 150 then nHeight = 150 end
+	-- set sizes and positions
+	frame:SetSize(nWidth, nHeight)
+	frame:SetDragArea(0, 0, nWidth, 55)
+	frame:Lookup('Btn_Close'):SetRelPos(nWidth - 35, 15)
+	frame:Lookup("Btn_Drag"):SetRelPos(nWidth - 18, nHeight - 20)
+	frame:Lookup('CheckBox_Maximize'):SetRelPos(nWidth - 63, 15)
+
+	local handle = frame:Lookup('', '')
+	handle:SetSize(nWidth, nHeight)
+	handle:Lookup('Image_BgT' ):SetSize(nWidth, 64)
+	handle:Lookup('Image_BgCT'):SetSize(nWidth - 32, 64)
+	handle:Lookup('Image_BgLC'):SetSize(8, nHeight - 149)
+	handle:Lookup('Image_BgCC'):SetSize(nWidth - 16, nHeight - 149)
+	handle:Lookup('Image_BgRC'):SetSize(8, nHeight - 149)
+	handle:Lookup('Image_BgCB'):SetSize(nWidth - 132, 85)
+	handle:Lookup('Text_Title'):SetSize(nWidth - 90, 30)
+	handle:Lookup('Text_Author'):SetRelPos(0, nHeight - 41)
+	handle:Lookup('Text_Author'):SetSize(nWidth - 31, 20)
+
+	local wnd = frame:Lookup('Wnd_Total')
+	wnd:SetSize(nWidth, nHeight)
+	wnd:Lookup('WndContainer_Category'):SetSize(nWidth - 22, 32)
+	wnd:Lookup('WndContainer_Category'):FormatAllContentPos()
+	wnd:Lookup('Btn_Weibo'):SetRelPos(nWidth - 135, 55)
+	wnd:Lookup('WndScroll_Tabs'):SetSize(171, nHeight - 102)
+	wnd:Lookup('WndScroll_Tabs', ''):SetSize(171, nHeight - 102)
+	wnd:Lookup('WndScroll_Tabs', ''):FormatAllItemPos()
+	wnd:Lookup('WndScroll_Tabs/ScrollBar_Tabs'):SetSize(16, nHeight - 111)
+
+	local hWnd = wnd:Lookup('', '')
+	wnd:Lookup('', ''):SetSize(nWidth, nHeight)
+	hWnd:Lookup('Image_Breaker'):SetSize(6, nHeight - 340)
+	hWnd:Lookup('Image_TabBg'):SetSize(nWidth - 2, 33)
+	hWnd:Lookup('Handle_DBClick'):SetSize(nWidth, 54)
+
 	local bHideTabs = nWidth < 550
-	hWnd:Lookup('WndScroll_Tabs'):SetVisible(not bHideTabs)
-	hTotal:Lookup('Image_Breaker'):SetVisible(not bHideTabs)
-	
+	wnd:Lookup('WndScroll_Tabs'):SetVisible(not bHideTabs)
+	hWnd:Lookup('Image_Breaker'):SetVisible(not bHideTabs)
+
 	if bHideTabs then
 		nWidth = nWidth + 181
-		hWnd:Lookup('WndScroll_MainPanel'):SetRelX(5)
+		wnd:Lookup('WndScroll_MainPanel'):SetRelX(5)
 	else
-		hWnd:Lookup('WndScroll_MainPanel'):SetRelX(186)
+		wnd:Lookup('WndScroll_MainPanel'):SetRelX(186)
 	end
-	
-	hWnd:Lookup('WndScroll_MainPanel'):SetSize(nWidth - 191, nHeight - 100)
-	hWnd:Lookup('WndScroll_MainPanel/ScrollBar_MainPanel'):SetSize(20, nHeight - 100)
-	hWnd:Lookup('WndScroll_MainPanel/ScrollBar_MainPanel'):SetRelPos(nWidth - 209, 0)
-	hWnd:Lookup('WndScroll_MainPanel/WndContainer_MainPanel'):SetSize(nWidth - 201, nHeight - 100)
-	hWnd:Lookup('WndScroll_MainPanel/WndContainer_MainPanel', ''):SetSize(nWidth - 201, nHeight - 100)
-	local hWndMainPanel = hFrame:Lookup('Wnd_Total/WndScroll_MainPanel/WndContainer_MainPanel')
+
+	wnd:Lookup('WndScroll_MainPanel'):SetSize(nWidth - 191, nHeight - 100)
+	wnd:Lookup('WndScroll_MainPanel/ScrollBar_MainPanel'):SetSize(20, nHeight - 100)
+	wnd:Lookup('WndScroll_MainPanel/ScrollBar_MainPanel'):SetRelPos(nWidth - 209, 0)
+	wnd:Lookup('WndScroll_MainPanel/WndContainer_MainPanel'):SetSize(nWidth - 201, nHeight - 100)
+	wnd:Lookup('WndScroll_MainPanel/WndContainer_MainPanel', ''):SetSize(nWidth - 201, nHeight - 100)
+	local hWndMainPanel = frame:Lookup('Wnd_Total/WndScroll_MainPanel/WndContainer_MainPanel')
 	if hWndMainPanel.OnPanelResize then
 		local res, err = pcall(hWndMainPanel.OnPanelResize, hWndMainPanel)
 		if not res then
@@ -1115,7 +1176,10 @@ function _MY.OnSizeChanged()
 	end
 	hWndMainPanel:FormatAllContentPos()
 	hWndMainPanel:Lookup('', ''):FormatAllItemPos()
-	hTotal:FormatAllItemPos()
+	handle:FormatAllItemPos()
+	-- reset position
+	local an = GetFrameAnchor(frame)
+	frame:SetPoint(an.s, 0, 0, an.r, an.x, an.y)
 end
 
 ---------------------------------------------------
@@ -1138,17 +1202,17 @@ end
 
 if _NORESTM_ >= 0 then
 	local time = GetTime()
-	
+
 	local function OnExit()
 		debug.sethook()
 	end
 	MY.RegisterExit("_NORESTM_", OnExit)
-	
+
 	local function OnBreathe()
 		time = GetTime()
 	end
 	BreatheCall("_NORESTM_", OnBreathe)
-	
+
 	local function trace_line(event, line)
 		local delay = GetTime() - time
 		if delay < _NORESTM_ then
