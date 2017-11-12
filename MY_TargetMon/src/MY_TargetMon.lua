@@ -161,41 +161,40 @@ local function UpdateAnchor(frame)
 	CorrectPos(frame)
 end
 
-local function FixFormatAllItemPos(hList)
-	local FormatAllItemPos = hList.FormatAllItemPos
-	hList.FormatAllItemPos = function(hList, ...)
-		local hItem = hList:Lookup(0)
-		if not hItem then
-			return
-		end
-		local W = hList:GetW()
-		local w, h = hItem:GetSize()
-		local columms = max(floor(W / w), 1)
-		local aItem = {}
-		for i = 0, hList:GetItemCount() - 1 do
-			local hItem = hList:Lookup(i)
-			if hItem:IsVisible() then
-				insert(aItem, hItem)
-			end
-		end
-		local align = hList:GetHAlign()
-		while #aItem > 0 do
-			local x, y, deltaX = 0, 0, 0
-			if align == ALIGNMENT.LEFT then
-				x, deltaX = 0, w
-			elseif align == ALIGNMENT.RIGHT then
-				x, deltaX = W, - w
-			elseif align == ALIGNMENT.CENTER then
-				x, deltaX = (W - w * min(#aItem, columms)) / 2, w
-			end
-			for i = 1, min(#aItem, columms) do
-				remove(aItem, 1):SetRelPos(x, y)
-				x = x + deltaX
-			end
-			y = y + deltaY
-		end
-		SafeExecuteWithThis(hList, FormatAllItemPos, hList, ...)
+local function FormatAllItemPosExt(hList)
+	local hItem = hList:Lookup(0)
+	if not hItem then
+		return
 	end
+	local W = hList:GetW()
+	local w, h = hItem:GetSize()
+	local columms = max(floor(W / w), 1)
+	local ignoreInvisible = hList:IsIgnoreInvisibleChild()
+	local aItem = {}
+	for i = 0, hList:GetItemCount() - 1 do
+		local hItem = hList:Lookup(i)
+		if not ignoreInvisible or hItem:IsVisible() then
+			insert(aItem, hItem)
+		end
+	end
+	local align, y = hList:GetHAlign(), 0
+	while #aItem > 0 do
+		local x, deltaX = 0, 0
+		if align == ALIGNMENT.LEFT then
+			x, deltaX = 0, w
+		elseif align == ALIGNMENT.RIGHT then
+			x, deltaX = W, - w
+		elseif align == ALIGNMENT.CENTER then
+			x, deltaX = (W - w * min(#aItem, columms)) / 2, w
+		end
+		for i = 1, min(#aItem, columms) do
+			remove(aItem, 1):SetRelPos(x, y)
+			x = x + deltaX
+		end
+		y = y + h
+	end
+	hList:SetSize(W, y)
+	hList:FormatAllItemPos()
 end
 
 local function RecreatePanel(config)
@@ -208,9 +207,9 @@ local function RecreatePanel(config)
 		l_frameIndex = l_frameIndex + 1
 		l_frames[config] = frame
 		frame.hList = frame:Lookup("", "Handle_List")
+		frame.hList.FormatAllItemPosExt = FormatAllItemPosExt
 		frame.hArrow = frame:Lookup("", "Handle_Arrow")
-		FixFormatAllItemPos(frame.hList)
-		
+
 		for k, v in pairs(FE) do
 			frame[k] = v
 		end
@@ -223,12 +222,11 @@ local function RecreatePanel(config)
 		frame:Scale(1 / frame.scale, 1 / frame.scale)
 	end
 	local hList, hArrow = frame.hList, frame.hArrow
-	
+
 	hList:Clear()
 	frame.tItem = {}
 	frame.config = config
-	local nWidth = 0
-	local nCount = 0
+	local nItemW, nItemH, nWidth, nHeight, nCount = 0, 0, 0, 0, 0
 	local function CreateItem(mon)
 		if not mon.enable then
 			return
@@ -243,7 +241,7 @@ local function RecreatePanel(config)
 		local txtProcess   = hCDBar:Lookup("Text_Process")
 		local imgProcess   = hCDBar:Lookup("Image_Process")
 		local txtName      = hCDBar:Lookup("Text_Name")
-		
+
 		-- 建立高速索引
 		hItem.box = box
 		hItem.mon = mon
@@ -262,7 +260,7 @@ local function RecreatePanel(config)
 			end
 			frame.tItem[mon.name][hItem] = true
 		end
-		
+
 		-- Box部分
 		box:SetObject(UI_OBJECT.BUFF, mon.id, 1, 1)
 		box:SetObjectIcon(mon.iconid or 13)
@@ -279,7 +277,7 @@ local function RecreatePanel(config)
 		box:SetOverTextFontScheme(2, 7)
 		-- Box背景图
 		XGUI(imgBoxBg):image(config.boxBgUITex)
-		
+
 		if config.type == 'SKILL' then
 			box.__SetCoolDownPercentage = box.SetCoolDownPercentage
 			box.SetCoolDownPercentage = function(box, fPercent, ...)
@@ -303,20 +301,20 @@ local function RecreatePanel(config)
 				box:__SetOverText(nIndex, szText, ...)
 			end
 		end
-		
+
 		-- 倒计时条
 		if config.cdBar then
 			txtProcess:SetW(config.cdBarWidth - 10)
 			txtProcess:SetText("")
-			
+
 			txtName:SetVisible(config.showName)
 			txtName:SetW(config.cdBarWidth - 10)
 			txtName:SetText(mon.longAlias or mon.name or '')
-			
+
 			XGUI(imgProcess):image(config.cdBarUITex)
 			imgProcess:SetW(config.cdBarWidth)
 			imgProcess:SetPercentage(0)
-			
+
 			hCDBar:Show()
 			hCDBar:SetW(config.cdBarWidth)
 			hItem.hCDBar = hCDBar
@@ -330,11 +328,15 @@ local function RecreatePanel(config)
 			hBox:SetSizeByAllItemSize()
 			hItem:SetSizeByAllItemSize()
 		end
-		
+		if nCount == 1 then
+			nItemW, nItemH = hItem:GetSize()
+		end
 		if nCount <= config.maxLineCount then
 			nWidth = nWidth + hItem:GetW()
 		end
-		-- hItem:Scale(config.scale, config.scale)
+		if nCount % config.maxLineCount == 1 then
+			nHeight = nHeight + hItem:GetH()
+		end
 		hItem:SetVisible(not config.hideVoid)
 	end
 	for _, mon in ipairs(config.monitors.common or EMPTY_TABLE) do
@@ -343,27 +345,29 @@ local function RecreatePanel(config)
 	for _, mon in ipairs(config.monitors[GetClientPlayer().GetKungfuMount().dwSkillID] or EMPTY_TABLE) do
 		CreateItem(mon)
 	end
+
+	nWidth = nWidth == 0 and 200 or nWidth
+	nHeight = nHeight == 0 and 50 or nHeight
+
+	hList:SetSize(nWidth, nHeight)
 	hList:SetHAlign(ALIGNMENT[config.alignment] or ALIGNMENT.LEFT)
-	hList:SetW(nWidth)
-	hList:SetIgnoreInvisibleChild(false)
-	hList:FormatAllItemPos()
-	hList:SetSizeByAllItemSize()
 	hList:SetIgnoreInvisibleChild(true)
-	hList:FormatAllItemPos()
+	hList:FormatAllItemPosExt()
 	UpdateHotkey(frame)
 
 	hArrow.imgArrow = hArrow:Lookup("Image_Arrow")
 	hArrow:Hide()
-	
-	local nW, nH = hList:GetSize()
-	nW = math.max(nW, 50 * config.scale)
-	nH = math.max(nH, 50 * config.scale)
-	frame.scale = config.scale
-	frame:SetSize(nW, nH)
-	frame:SetDragArea(0, 0, nW, nH)
+
+	frame:SetSize(nWidth, nHeight)
+	frame:SetDragArea(0, 0, nWidth, nHeight)
 	frame:EnableDrag(config.dragable)
 	frame:SetMousePenetrable(not config.dragable)
 	frame:Scale(config.scale, config.scale)
+
+	frame.scale = config.scale
+	frame.w, frame.h = frame:GetSize()
+	frame.dragW = (nWidth) == 0 and 200 or (nWidth * config.scale)
+	frame.dragH = (nItemH) == 0 and 200 or (nItemH * config.scale)
 	UpdateAnchor(frame)
 end
 
@@ -427,10 +431,16 @@ local function UpdateItem(hItem, KTarget, buff, szName, tItem, config, nFrameCou
 			local nTimeLeft = math.max(0, buff.nEndFrame - nFrameCount) / 16
 			local szTimeLeft = nTimeLeft > 3600 and '1h+' or ((config.decimalTime == -1 or nTimeLeft < config.decimalTime) and "%.1f'" or "%d'"):format(nTimeLeft)
 			local nBuffTime = math.max(GetBuffTime(buff.dwID, buff.nLevel) / 16, nTimeLeft)
-			if l_tBuffTime[KTarget.dwID][buff.dwID] then
-				nBuffTime = math.max(l_tBuffTime[KTarget.dwID][buff.dwID], nBuffTime)
+			if not l_tBuffTime[KTarget.dwID][buff.dwID] then
+				l_tBuffTime[KTarget.dwID][buff.dwID] = {}
 			end
-			l_tBuffTime[KTarget.dwID][buff.dwID] = nBuffTime
+			if not l_tBuffTime[KTarget.dwID][buff.dwID][buff.nLevel] then
+				l_tBuffTime[KTarget.dwID][buff.dwID][buff.nLevel] = {}
+			end
+			if l_tBuffTime[KTarget.dwID][buff.dwID][buff.nLevel][buff.nStackNum] then
+				nBuffTime = math.max(l_tBuffTime[KTarget.dwID][buff.dwID][buff.nLevel][buff.nStackNum])
+			end
+			l_tBuffTime[KTarget.dwID][buff.dwID][buff.nLevel][buff.nStackNum] = nBuffTime
 			-- 处理新出现的BUFF
 			if not hItem.mon.iconid or hItem.mon.iconid == 13 then
 				-- 计算图标 名字 ID等
@@ -579,7 +589,7 @@ function FE.OnFrameBreathe()
 	local KTarget = MY.GetObject(dwType, dwID)
 	local targetChanged = dwType ~= this.dwType or dwID ~= this.dwID
 	local nFrameCount = GetLogicFrameCount()
-	
+
 	if not KTarget then
 		for i = 0, hList:GetItemCount() - 1 do
 			UpdateItem(hList:Lookup(i), KTarget, nil, nil, this.tItem, config, nFrameCount, targetChanged)
@@ -643,7 +653,7 @@ function FE.OnFrameBreathe()
 		end
 		-- 检查是否需要重绘界面坐标
 		if needFormatItemPos then
-			hList:FormatAllItemPos()
+			hList:FormatAllItemPosExt()
 		end
 
 		UpdateArrow(hArrow, KTarget, config, dwID)
@@ -704,8 +714,12 @@ function FE.OnEvent(event)
 	elseif event == "SKILL_MOUNT_KUNG_FU" then
 		RecreatePanel(this.config)
 	elseif event == "ON_ENTER_CUSTOM_UI_MODE" then
+		this:SetH(this.dragH)
+		this:Lookup('', 'Handle_List'):SetAlpha(90)
 		UpdateCustomModeWindow(this, this.config.caption, not this.config.dragable)
 	elseif event == "ON_LEAVE_CUSTOM_UI_MODE" then
+		this:SetH(this.h)
+		this:Lookup('', 'Handle_List'):SetAlpha(255)
 		UpdateCustomModeWindow(this, this.config.caption, not this.config.dragable)
 		if this.config.dragable then
 			this:EnableDrag(true)
@@ -789,7 +803,7 @@ local function OnInit()
 	local data = MY.LoadLUAData(DEFAULT_CONFIG_FILE)
 	ConfigTemplate = data.template
 	data.default = MY.LoadLUAData(CUSTOM_DEFAULT_CONFIG_FILE) or data.default
-	
+
 	local OLD_PATH = {'config/my_buffmon.jx3dat', MY_DATA_PATH.ROLE}
 	local SZ_OLD_PATH = MY.FormatPath(OLD_PATH)
 	if IsLocalFileExist(SZ_OLD_PATH) then
@@ -993,7 +1007,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		end,
 	})
 	y = y + 30
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 20, y = y,
 		text = _L['Enable'],
@@ -1003,7 +1017,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 			RecreatePanel(config)
 		end,
 	})
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 120, y = y, w = 200,
 		text = _L['Hide others buff'],
@@ -1016,7 +1030,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 			return config.type == 'BUFF'
 		end,
 	})
-	
+
 	ui:append("WndComboBox", {
 		x = w - 250, y = y, w = 135,
 		text = _L['Set target'],
@@ -1068,7 +1082,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		onclick = function() OpenConfig(config) end,
 	})
 	y = y + 30
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 20, y = y, w = 100,
 		text = _L['Undragable'],
@@ -1078,7 +1092,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 			RecreatePanel(config)
 		end,
 	})
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 120, y = y, w = 200,
 		text = _L['Hide void'],
@@ -1088,7 +1102,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 			RecreatePanel(config)
 		end,
 	})
-	
+
 	ui:append("WndSliderBox", {
 		x = w - 250, y = y,
 		sliderstyle = MY.Const.UI.Slider.SHOW_VALUE,
@@ -1101,7 +1115,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		end,
 	})
 	y = y + 30
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 20, y = y, w = 120,
 		text = _L['Show cd bar'],
@@ -1111,7 +1125,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 			RecreatePanel(config)
 		end,
 	})
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 120, y = y, w = 120,
 		text = _L['Show name'],
@@ -1121,7 +1135,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 			RecreatePanel(config)
 		end,
 	})
-	
+
 	ui:append("WndSliderBox", {
 		x = w - 250, y = y,
 		sliderstyle = MY.Const.UI.Slider.SHOW_VALUE,
@@ -1134,7 +1148,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		end,
 	})
 	y = y + 30
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 20, y = y, w = 120,
 		text = _L['Show arrow'],
@@ -1144,7 +1158,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 			RecreatePanel(config)
 		end,
 	})
-	
+
 	ui:append("WndCheckBox", {
 		x = x + 120, y = y, w = 140,
 		text = _L['Arrow camera based'],
@@ -1198,7 +1212,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		end,
 	})
 	y = y + 30
-	
+
 	ui:append("WndComboBox", {
 		x = 40, y = y, w = (w - 250 - 30 - 30 - 10) / 2,
 		text = _L['Select background style'],
@@ -1252,7 +1266,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		end,
 	})
 	y = y + 30
-	
+
 	return x, y
 end
 
@@ -1261,22 +1275,22 @@ function PS.OnPanelActive(wnd)
 	local w, h = ui:size()
 	local X, Y = 20, 30
 	local x, y = X, Y
-	
+
 	local OpenConfig
 	do -- single config details
 		local l_config
 		local uiWrapper = ui:append('WndWindow', { name = 'WndWindow_Wrapper', x = 0, y = 0, w = w, h = h }, true)
 		uiWrapper:append('Shadow', { x = 0, y = 0, w = w, h = h, r = 0, g = 0, b = 0, alpha = 150 })
 		uiWrapper:append('Shadow', { x = 10, y = 10, w = w - 20, h = h - 20, r = 255, g = 255, b = 255, alpha = 40 })
-		
+
 		local x0, y0 = 20, 20
 		local w0, h0 = w - 40, h - 30
 		local w1, w2 = w0 / 2 - 5, w0 / 2 - 5
 		local x1, x2 = x0, x0 + w1 + 10
-		
+
 		local listCommon = uiWrapper:append("WndListBox", { x = x1, y = y0 + 25, w = w1, h = h0 - 30 - 30 }, true)
 		local listKungfu = uiWrapper:append("WndListBox", { x = x2, y = y0 + 25, w = w2, h = h0 - 30 - 30 }, true)
-		
+
 		local function Add(kungfuid)
 			if kungfuid == 'current' then
 				kungfuid = GetClientPlayer().GetKungfuMount().dwSkillID
@@ -1311,7 +1325,7 @@ function PS.OnPanelActive(wnd)
 		uiWrapper:append("WndButton2", { x = x1 + w1 - 60, y = y0 - 1, w = 60, h = 28, text = _L['Add'], onclick = function() Add('common') end })
 		uiWrapper:append("Text", { x = x2 + 5, y = y0, w = w2 - 60 - 5,  h = 25, text = _L['Current kungfu monitor'] })
 		uiWrapper:append("WndButton2", { x = x2 + w2 - 60, y = y0 - 1, w = 60, h = 28, text = _L['Add'], onclick = function() Add('current') end })
-		
+
 		-- 初始化list控件
 		local function onMenu(hItem, szText, szID, data)
 			local mon = data.mon
@@ -1445,7 +1459,7 @@ function PS.OnPanelActive(wnd)
 		end
 		listCommon:listbox('onmenu', onMenu)
 		listKungfu:listbox('onmenu', onMenu)
-		
+
 		function OpenConfig(config)
 			l_config = config
 			listCommon:listbox('clear')
@@ -1477,7 +1491,7 @@ function PS.OnPanelActive(wnd)
 			uiWrapper:show()
 			uiWrapper:bringToTop()
 		end
-		
+
 		uiWrapper:append('WndButton2', {
 			x = x0 + w0 / 2 - 50, y = y0 + h0 - 30,
 			w = 100, h = 30, text = _L['Close'],
@@ -1488,13 +1502,13 @@ function PS.OnPanelActive(wnd)
 		})
 		uiWrapper:hide()
 	end
-	
+
 	for _, config in ipairs(Config) do
 		x, y = GenePS(ui, config, x, y, w, h, OpenConfig)
 		y = y + 20
 	end
 	y = y + 10
-	
+
 	x = (w - 310) / 2
 	ui:append("WndButton2", {
 		x = x, y = y,
