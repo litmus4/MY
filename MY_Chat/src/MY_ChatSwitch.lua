@@ -23,7 +23,7 @@ local function UpdateChannelDailyLimit(hRadio, bPlus)
 	if not (me and shaCount) then
 		return
 	end
-
+	
 	local dwPercent = 1
 	local info = hRadio.info
 	local nChannel = info.channel
@@ -33,7 +33,7 @@ local function UpdateChannelDailyLimit(hRadio, bPlus)
 			MY_ChatSwitch.tChannelCount = {szDate = szDate}
 		end
 		MY_ChatSwitch.tChannelCount[nChannel] = (MY_ChatSwitch.tChannelCount[nChannel] or 0) + (bPlus and 1 or 0)
-
+		
 		local nDailyCount = MY_ChatSwitch.tChannelCount[nChannel]
 		local nDailyLimit = MY.GetChannelDailyLimit(me.nLevel, nChannel)
 		if nDailyLimit then
@@ -224,10 +224,16 @@ for i, v in ipairs(CHANNEL_LIST) do
 end
 local m_tChannelTime = {}
 
+MY_ChatSwitch.anchor = { x=10, y=-60, s="BOTTOMLEFT", r="BOTTOMLEFT" }
 MY_ChatSwitch.tChannelCount = {}
+MY_ChatSwitch.bDisplayPanel = false
+MY_ChatSwitch.bLockPostion = false
 MY_ChatSwitch.bAlertBeforeClear = true
+RegisterCustomData("MY_ChatSwitch.anchor")
 RegisterCustomData("MY_ChatSwitch.aWhisper", 1)
 RegisterCustomData("MY_ChatSwitch.tChannelCount")
+RegisterCustomData("MY_ChatSwitch.bDisplayPanel", 1)
+RegisterCustomData("MY_ChatSwitch.bLockPostion")
 RegisterCustomData("MY_ChatSwitch.bAlertBeforeClear")
 for k, _ in pairs(MY_ChatSwitch.tChannel) do RegisterCustomData("MY_ChatSwitch.tChannel."..k) end
 
@@ -243,8 +249,8 @@ function MY_ChatSwitch.OnFrameCreate()
 	this:RegisterEvent("UI_SCALED")
 	this:RegisterEvent("PLAYER_SAY")
 	this:RegisterEvent("CUSTOM_DATA_LOADED")
-	this:EnableDrag(not MY.GetStorage('BoolValues.MY_ChatSwitch_LockPostion'))
-
+	this:EnableDrag(not MY_ChatSwitch.bLockPostion)
+	
 	local hContainer = this:Lookup("WndContainer_Radios")
 	hContainer:SetW(0xFFFF)
 	hContainer:Clear()
@@ -299,7 +305,7 @@ function MY_ChatSwitch.OnFrameCreate()
 	end
 	hContainer:FormatAllContentPos()
 	hContainer:SetSize(hContainer:GetAllContentSize())
-
+	
 	this:Lookup("", "Image_Bar"):SetW(hContainer:GetW() + 35)
 	this:SetW(hContainer:GetW() + 60)
 	MY_ChatSwitch.UpdateAnchor(this)
@@ -352,7 +358,7 @@ function MY_ChatSwitch.OnFrameBreathe()
 		if nCooldown <= 0 then
 			m_tChannelTime[nChannel] = nil
 		end
-
+		
 		local hCheck = this.tRadios[nChannel]
 		local txtCooldown = hCheck and hCheck.txtCooldown
 		if txtCooldown then
@@ -383,13 +389,11 @@ end
 
 function MY_ChatSwitch.OnFrameDragEnd()
 	this:CorrectPos()
-	MY.SetStorage('FrameAnchor.MY_ChatSwitch', GetFrameAnchor(this))
+	MY_ChatSwitch.anchor = GetFrameAnchor(this)
 end
 
 function MY_ChatSwitch.UpdateAnchor(this)
-	local anchor = MY.GetStorage('FrameAnchor.MY_ChatSwitch')
-		or { x = 10, y = -60, s = "BOTTOMLEFT", r = "BOTTOMLEFT" }
-	this:SetPoint(anchor.s, 0, 0, anchor.r, anchor.x, anchor.y)
+	this:SetPoint(MY_ChatSwitch.anchor.s, 0, 0, MY_ChatSwitch.anchor.r, MY_ChatSwitch.anchor.x, MY_ChatSwitch.anchor.y)
 	this:CorrectPos()
 end
 
@@ -413,12 +417,11 @@ MY.RegisterEvent("ON_CHAT_SET_ATR", OnChatSetATR)
 
 function MY_ChatSwitch.ReInitUI()
 	Wnd.CloseWindow("MY_ChatSwitch")
-	if not MY.GetStorage('BoolValues.MY_ChatSwitch_DisplayPanel') then
-		return
+	if MY_ChatSwitch.bDisplayPanel then
+		Wnd.OpenWindow(INI_PATH, "MY_ChatSwitch")
 	end
-	Wnd.OpenWindow(INI_PATH, "MY_ChatSwitch")
 end
-MY.RegisterStorageInit('MY_CHAT', MY_ChatSwitch.ReInitUI)
+MY.RegisterInit('MY_CHAT', MY_ChatSwitch.ReInitUI)
 
 local PS = {}
 function PS.OnPanelActive(wnd)
@@ -428,39 +431,39 @@ function PS.OnPanelActive(wnd)
 	local x , y  = x0, y0
 	local deltaX = 25
 	local deltaY = 33
-
+	
 	ui:append("WndButton", {
 		x = w - x - 80, y = y,
 		w = 80, h = 30,
 		text = _L["about..."],
 		onclick = function() MY.Alert(_L["Mingyi Plugins - Chatpanel\nThis plugin is developed by Zhai YiMing @ derzh.com."]) end,
 	})
-
+	
 	ui:append("WndCheckBox", {
 		x = x, y = y, w = 250,
 		text = _L["display panel"],
-		checked = MY.GetStorage('BoolValues.MY_ChatSwitch_DisplayPanel'),
+		checked = MY_ChatSwitch.bDisplayPanel,
 		oncheck = function(bChecked)
-			MY.SetStorage('BoolValues.MY_ChatSwitch_DisplayPanel', bChecked)
+			MY_ChatSwitch.bDisplayPanel = bChecked
 			MY_ChatSwitch.ReInitUI()
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndCheckBox", {
 		x = x + deltaX, y = y, w = 250,
 		text = _L["lock postion"],
-		checked = MY.GetStorage('BoolValues.MY_ChatSwitch_LockPostion'),
+		checked = MY_ChatSwitch.bLockPostion,
 		oncheck = function(bChecked)
-			MY.SetStorage('BoolValues.MY_ChatSwitch_LockPostion', bChecked)
+			MY_ChatSwitch.bLockPostion = bChecked
 			MY_ChatSwitch.ReInitUI()
 		end,
 		isdisable = function()
-			return not MY.GetStorage('BoolValues.MY_ChatSwitch_DisplayPanel')
+			return not MY_ChatSwitch.bDisplayPanel
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndComboBox", {
 		x = x + deltaX, y = y, w = 150, h = 25,
 		text = _L['channel setting'],
@@ -468,7 +471,7 @@ function PS.OnPanelActive(wnd)
 			local t = {
 				szOption = _L['channel setting'],
 				fnDisable = function()
-					return not MY.GetStorage('BoolValues.MY_ChatSwitch_DisplayPanel')
+					return not MY_ChatSwitch.bDisplayPanel
 				end,
 			}
 			for _, v in ipairs(CHANNEL_LIST) do
@@ -484,11 +487,11 @@ function PS.OnPanelActive(wnd)
 			return t
 		end,
 		isdisable = function()
-			return not MY.GetStorage('BoolValues.MY_ChatSwitch_DisplayPanel')
+			return not MY_ChatSwitch.bDisplayPanel
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndCheckBox", {
 		x = x, y = y, w = 250,
 		text = _L["team balloon"],
@@ -498,7 +501,7 @@ function PS.OnPanelActive(wnd)
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndCheckBox", {
 		x = x, y = y, w = 250,
 		text = _L["chat time"],
@@ -511,7 +514,7 @@ function PS.OnPanelActive(wnd)
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndComboBox", {
 		x = x + deltaX, y = y, w = 150,
 		text = _L['chat time format'],
@@ -540,7 +543,7 @@ function PS.OnPanelActive(wnd)
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndCheckBox", {
 		x = x, y = y, w = 250,
 		text = _L["chat copy"],
@@ -550,7 +553,7 @@ function PS.OnPanelActive(wnd)
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndCheckBox", {
 		x = x + deltaX, y = y, w = 250,
 		text = _L["always show *"],
@@ -563,7 +566,7 @@ function PS.OnPanelActive(wnd)
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndCheckBox", {
 		x = x + deltaX, y = y, w = 250,
 		text = _L["always be white"],
@@ -576,7 +579,7 @@ function PS.OnPanelActive(wnd)
 		end,
 	})
 	y = y + deltaY
-
+	
 	ui:append("WndCheckBox", {
 		x = x + deltaX, y = y, w = 250,
 		text = _L["hide system msg copy"],
@@ -589,7 +592,7 @@ function PS.OnPanelActive(wnd)
 		end,
 	})
 	y = y + deltaY
-
+	
 	if (MY_Farbnamen and MY_Farbnamen.GetMenu) then
 		ui:append("WndComboBox", {
 			x = x, y = y, w = 150,
