@@ -953,7 +953,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		onchange = function(raw, val) config.caption = val end,
 	})
 	ui:append("WndButton2", {
-		x = w - 240, y = y,
+		x = w - 180, y = y,
 		w = 50, h = 30,
 		text = _L["Move Up"],
 		onclick = function()
@@ -969,7 +969,7 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 		end,
 	})
 	ui:append("WndButton2", {
-		x = w - 190, y = y,
+		x = w - 125, y = y,
 		w = 50, h = 30,
 		text = _L["Move Down"],
 		onclick = function()
@@ -982,14 +982,6 @@ local function GenePS(ui, config, x, y, w, h, OpenConfig)
 					end
 				end
 			end
-		end,
-	})
-	ui:append("WndButton2", {
-		x = w - 130, y = y,
-		w = 60, h = 30,
-		text = _L["Export"],
-		onclick = function()
-			XGUI.OpenTextEditor(var2str(config))
 		end,
 	})
 	ui:append("WndButton2", {
@@ -1509,7 +1501,7 @@ function PS.OnPanelActive(wnd)
 	end
 	y = y + 10
 
-	x = (w - 310) / 2
+	x = (w - 380) / 2
 	ui:append("WndButton2", {
 		x = x, y = y,
 		w = 60, h = 30,
@@ -1527,15 +1519,81 @@ function PS.OnPanelActive(wnd)
 		w = 60, h = 30,
 		text = _L["Import"],
 		onclick = function()
-			GetUserInput(_L['Please input import data:'], function(szVal)
-				local config = str2var(szVal)
-				if config then
-					UpdateConfigDataVersion(config)
-					table.insert(Config, config)
-					RecreatePanel(config)
-					MY.SwitchTab("MY_TargetMon", true)
+			local file = GetOpenFileName(
+				_L['Please select import target monitor data file.'],
+				'JX3 File(*.jx3dat)\0*.jx3dat\0All Files(*.*)\0*.*\0\0',
+				MY.FormatPath({ 'export/TargetMon', MY_DATA_PATH.GLOBAL })
+			)
+			if file == '' then
+				return
+			end
+			local configs = MY.LoadLUAData(file)
+			if not configs then
+				return
+			end
+			local importCount = 0
+			local replaceCount = 0
+			for _, config in ipairs(configs) do
+				UpdateConfigDataVersion(config)
+				for i, cfg in ipairs_r(Config) do
+					if cfg.caption == config.caption then
+						table.remove(Config, i)
+						replaceCount = replaceCount + 1
+					end
 				end
-			end, function() end, function() end, nil, "" )
+				table.insert(Config, config)
+				importCount = importCount + 1
+			end
+			RecreateAllPanel(true)
+			MY.SwitchTab("MY_TargetMon", true)
+			MY.Sysmsg({ _L('Import successed, %d imported and %d replaced.', importCount, replaceCount) })
+			OutputMessage('MSG_ANNOUNCE_YELLOW', _L('Import successed, %d imported and %d replaced.', importCount, replaceCount))
+		end,
+	})
+	x = x + 70
+	ui:append("WndButton2", {
+		x = x, y = y,
+		w = 60, h = 30,
+		text = _L["Export"],
+		menu = function()
+			local configs = {}
+			local menu = {}
+			for _, config in ipairs(Config) do
+				table.insert(menu, {
+					bCheck = true,
+					szOption = config.caption,
+					fnAction = function()
+						for i, cfg in ipairs_r(configs) do
+							if cfg == config then
+								table.remove(configs, i)
+								return
+							end
+						end
+						table.insert(configs, config)
+					end,
+				})
+			end
+			if #menu > 0 then
+				table.insert(menu, MENU_DIVIDER)
+			end
+			table.insert(menu, {
+				szOption = _L['Ensure export'],
+				fnAction = function()
+					local file = MY.FormatPath({
+						"export/TargetMon/$name@$server@"
+							.. MY.FormatTime("yyyyMMddhhmmss")
+							.. ".jx3dat",
+						MY_DATA_PATH.GLOBAL,
+					})
+					MY.SaveLUAData(file, configs)
+					MY.Sysmsg({ _L('Data exported, file saved at %s.', file) })
+					OutputMessage('MSG_ANNOUNCE_YELLOW', _L('Data exported, file saved at %s.', file))
+				end,
+				fnDisable = function()
+					return not next(configs)
+				end,
+			})
+			return menu
 		end,
 	})
 	x = x + 70

@@ -67,8 +67,10 @@ function MY.FormatPath(oFilePath, ePathType)
 	else
 		szFilePath, ePathType = oFilePath, MY_DATA_PATH.NORMAL
 	end
+	-- Unified the directory separator
+	szFilePath = string.gsub(szFilePath, '\\', '/')
 	-- if it's relative path then complete path with "/MY@DATA/"
-	if string.sub(szFilePath, 1, 2) ~= './' then
+	if szFilePath:sub(1, 2) ~= './' and szFilePath:sub(2, 3) ~= ':/' then
 		if ePathType == MY_DATA_PATH.GLOBAL then
 			szFilePath = "!all-users@$lang/" .. szFilePath
 		elseif ePathType == MY_DATA_PATH.ROLE then
@@ -78,8 +80,6 @@ function MY.FormatPath(oFilePath, ePathType)
 		end
 		szFilePath = MY.GetAddonInfo().szInterfaceRoot .. "MY#DATA/" .. szFilePath
 	end
-	-- Unified the directory separator
-	szFilePath = string.gsub(szFilePath, '\\', '/')
 	-- if exist $uid then add user role identity
 	if string.find(szFilePath, "%$uid") then
 		szFilePath = szFilePath:gsub("%$uid", MY.Player.GetUUID())
@@ -103,6 +103,10 @@ function MY.FormatPath(oFilePath, ePathType)
 	-- if exist $relserver then add relserver identity
 	if string.find(szFilePath, "%$relserver") then
 		szFilePath = szFilePath:gsub("%$relserver", ((MY.Game.GetRealServer()):gsub('[/\\|:%*%?"<>]', '')))
+	end
+	local rootPath = GetRootPath():gsub('\\', '/')
+	if szFilePath:find(rootPath) == 1 then
+		szFilePath = szFilePath:gsub(rootPath, '')
 	end
 	return szFilePath
 end
@@ -499,6 +503,22 @@ local l_tBoolValues = {
 	['MY_ChatSwitch_DisplayPanel'] = 0,
 	['MY_ChatSwitch_LockPostion'] = 1,
 	['MY_Recount_Enable'] = 2,
+	['MY_ChatSwitch_CH1'] = 3,
+	['MY_ChatSwitch_CH2'] = 4,
+	['MY_ChatSwitch_CH3'] = 5,
+	['MY_ChatSwitch_CH4'] = 6,
+	['MY_ChatSwitch_CH5'] = 7,
+	['MY_ChatSwitch_CH6'] = 8,
+	['MY_ChatSwitch_CH7'] = 9,
+	['MY_ChatSwitch_CH8'] = 10,
+	['MY_ChatSwitch_CH9'] = 11,
+	['MY_ChatSwitch_CH10'] = 12,
+	['MY_ChatSwitch_CH11'] = 13,
+	['MY_ChatSwitch_CH12'] = 14,
+	['MY_ChatSwitch_CH13'] = 15,
+	['MY_ChatSwitch_CH14'] = 16,
+	['MY_ChatSwitch_CH15'] = 17,
+	['MY_ChatSwitch_CH16'] = 18,
 }
 local l_watches = {}
 local BIT_NUMBER = 8
@@ -586,6 +606,7 @@ local function OnInit()
 	end
 	INIT_FUNC_LIST = {}
 end
+MY.RegisterEvent('RELOAD_UI_ADDON_END.MY_LIB_Storage', OnInit)
 MY.RegisterEvent('FIRST_SYNC_USER_PREFERENCES_END.MY_LIB_Storage', OnInit)
 end
 
@@ -633,6 +654,9 @@ function _C.GetPlayerAddonMenu()
 			table.insert(menu, v)
 		end
 	end
+	table.sort(menu, function(m1, m2)
+		return #m1 < #m2
+	end)
 	return {menu}
 end
 -- get target addon menu
@@ -646,6 +670,9 @@ function _C.GetTargetAddonMenu()
 			table.insert(menu, v)
 		end
 	end
+	table.sort(menu, function(m1, m2)
+		return #m1 < #m2
+	end)
 	return menu
 end
 -- get trace button menu
@@ -659,6 +686,9 @@ function _C.GetTraceButtonMenu()
 			table.insert(menu, v)
 		end
 	end
+	table.sort(menu, function(m1, m2)
+		return #m1 < #m2
+	end)
 	return {menu}
 end
 
